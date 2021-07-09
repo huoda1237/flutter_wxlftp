@@ -11,8 +11,10 @@ import android.os.Handler;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.widget.Toast;
 
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Created by Edward on 2018-01-30.
@@ -40,47 +42,58 @@ public class AccessibilitySampleService extends AccessibilityService {
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         final SharedPreferences sharedPreferences = getSharedPreferences(Constant.WECHAT_STORAGE, Activity.MODE_MULTI_PROCESS);
-        int eventType = event.getEventType(); 
-        flag= sharedPreferences.getBoolean(Constant.SendBool, true); 
+        int eventType = event.getEventType();
+        flag= sharedPreferences.getBoolean(Constant.SendBool, true);
         accessibilityNodeInfo = getRootInActiveWindow();
+        String name = event.getText().toString();
+//        Toast.makeText(getBaseContext(), name, Toast.LENGTH_LONG).show();
+        if(name.equals("[发现]")){
+            Toast.makeText(getBaseContext(), name, Toast.LENGTH_LONG).show();
+            //如果在发现界面，则点击跳转到朋友圈里面
+            jumpToCircleOfFriends("朋友圈");
+        }
         switch (eventType) {
-            case AccessibilityEvent.TYPE_VIEW_SCROLLED: 
-                //第一次进入如果直接是朋友圈界面
+            case AccessibilityEvent.TYPE_VIEW_SCROLLED:
                 if (!flag && event.getClassName().equals("com.tencent.mm.plugin.sns.ui.SnsTimeLineUI")) {
+                    //如果是在朋友圈的界面，则点击发朋友圈的按钮开始选择图片
                     clickCircleOfFriendsBtn();//点击发送朋友圈按钮
                 }
                 if (!flag && event.getClassName().equals("com.tencent.mm.ui.LauncherUI")) {
-                    jumpToCircleOfFriends();//进入朋友圈页面
+                    jumpToCircleOfFriends("发现");
                 }
                 if (!flag && event.getClassName().equals("com.tencent.mm.ui.mogic.WxViewPager")) {
-                    jumpToCircleOfFriends();//进入朋友圈页面
+                    jumpToCircleOfFriends("发现");
                 }
                 if (!flag && event.getClassName().equals("com.tencent.mm.ui.mogic.WxViewPager")) {
-                    jumpToCircleOfFriends();//进入朋友圈页面
+                    jumpToCircleOfFriends("发现");
                 }
                 break;
-            case AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED: 
+            case AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED:
                 if (!flag && event.getClassName().equals("com.tencent.mm.ui.LauncherUI")) {
-                    jumpToCircleOfFriends();//进入朋友圈页面
+                    //进入到微信界面以后再跳到发现界面
+                    jumpToCircleOfFriends("发现");
                 }
                 if (!flag && event.getClassName().equals("com.tencent.mm.plugin.sns.ui.SnsTimeLineUI")) {
-                    clickCircleOfFriendsBtn();//点击发送朋友圈按钮
-                } 
+                    //监听到进入朋友圈的界面，触发点击发送朋友圈的按钮开始选择相册
+                    clickCircleOfFriendsBtn();
+                }
                 if (!flag && event.getClassName().equals("com.tencent.mm.plugin.gallery.ui.AlbumPreviewUI")) {
+                    //监听到进入选择图片的界面，开始选择图片
                     new Handler().postDelayed(new Runnable() {
                         @Override
                         public void run() {
                             if (sharedPreferences != null) {
                                 int index = sharedPreferences.getInt(Constant.INDEX, 0);
-                                int count = sharedPreferences.getInt(Constant.COUNT, 0); 
+                                int count = sharedPreferences.getInt(Constant.COUNT, 0);
                                 choosePicture(index,count>9?9:count);
                             }
                         }
                     }, TEMP);
                 }
                 if (!flag && event.getClassName().equals("com.tencent.mm.plugin.sns.ui.SnsUploadUI")) {
+                    //监听到进入发表界面，写入发表的内容，并触发发表按钮
                     String content = sharedPreferences.getString(Constant.CONTENT, "");
-                    inputContentFinish(content);//写入要发送的朋友圈内容
+                    inputContentFinish(content);
                 }
 
                 break;
@@ -88,13 +101,31 @@ public class AccessibilitySampleService extends AccessibilityService {
     }
 
     /**
-     * 跳进朋友圈
+     * 跳进发现界面
      */
-    private void jumpToCircleOfFriends() {
+    private void jumpToCircleOfFriends(final String name) {
         new Handler().postDelayed(new Runnable() {
             @Override
             public void run() {
-                List<AccessibilityNodeInfo> list = accessibilityNodeInfo.findAccessibilityNodeInfosByText("朋友圈");
+                List<AccessibilityNodeInfo> list = accessibilityNodeInfo.findAccessibilityNodeInfosByText(name);
+                if (list != null && list.size() != 0) {
+                    AccessibilityNodeInfo tempInfo = list.get(0);
+                    if (tempInfo != null && tempInfo.getParent() != null) {
+                        tempInfo.getParent().performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                    }
+                }
+            }
+        }, TEMP);
+    }
+
+    /**
+     * 跳进朋友圈界面
+     */
+    private void jumpToCircleOfFriend(final String name) {
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                List<AccessibilityNodeInfo> list = accessibilityNodeInfo.findAccessibilityNodeInfosByText(name);
                 if (list != null && list.size() != 0) {
                     AccessibilityNodeInfo tempInfo = list.get(0);
                     if (tempInfo != null && tempInfo.getParent() != null) {
@@ -129,7 +160,11 @@ public class AccessibilitySampleService extends AccessibilityService {
         }
         return false;
     }
-    ///
+
+    /***
+     * 点击发表按钮
+     *
+     * */
     private boolean sendMsg() {
         List<AccessibilityNodeInfo> list = accessibilityNodeInfo.findAccessibilityNodeInfosByText("发表");
         if (performClickBtn(list)) {
@@ -154,7 +189,7 @@ public class AccessibilitySampleService extends AccessibilityService {
                 //九张图没有添加照片的按钮 则用图片 图片
                 final SharedPreferences sharedPreferences = getSharedPreferences(Constant.WECHAT_STORAGE, android.content.Context.MODE_MULTI_PROCESS);
                 int count = sharedPreferences.getInt(Constant.COUNT, 0);
-                List<AccessibilityNodeInfo> nodeInfoList = accessibilityNodeInfo.findAccessibilityNodeInfosByText(count>=9?"图片":"添加照片按钮"); 
+                List<AccessibilityNodeInfo> nodeInfoList = accessibilityNodeInfo.findAccessibilityNodeInfosByText(count>=9?"图片":"添加照片按钮");
                 if (nodeInfoList == null ||
                         nodeInfoList.size() == 0 ||
                         nodeInfoList.get(0) == null ||
@@ -162,23 +197,24 @@ public class AccessibilitySampleService extends AccessibilityService {
                         nodeInfoList.get(0).getParent().getParent() == null ||
                         nodeInfoList.get(0).getParent().getParent().getParent() == null ||
                         nodeInfoList.get(0).getParent().getParent().getParent().getChildCount() == 0) {
-                        return;
+                    return;
                 }
                 AccessibilityNodeInfo tempInfo = nodeInfoList.get(0).getParent().getParent().getParent().getChild(1);//微信6.6.6
                 //不需要自动发布
                 if (pasteContent(tempInfo, contentStr)) {
-                   // sendMsg();
+                    // sendMsg();
                     //已完成发布 修改状态
-                    flag = true;//标记为已发送 
-                    SharedPreferences.Editor editor = sharedPreferences.edit();
-                    editor.putBoolean(Constant.SendBool, true);
-                    editor.commit();
+//                    flag = true;//标记为已发送
+//                    SharedPreferences.Editor editor = sharedPreferences.edit();
+//                    editor.putBoolean(Constant.SendBool, true);
+//                    editor.commit();
                 }
             }
         }, TEMP);
     }
 
     /**
+     * 模拟按钮点击事件
      * @param accessibilityNodeInfoList
      * @return
      */
@@ -207,34 +243,15 @@ public class AccessibilitySampleService extends AccessibilityService {
         new Handler().postDelayed(new Runnable() {
             @Override
             public void run() {
+
                 if (accessibilityNodeInfo == null) {
                     return;
                 }
-                List<AccessibilityNodeInfo> accessibilityNodeInfoList = accessibilityNodeInfo.findAccessibilityNodeInfosByText("预览");
-                if (accessibilityNodeInfoList == null ||
-                        accessibilityNodeInfoList.size() == 0 ||
-                        accessibilityNodeInfoList.get(0).getParent() == null ||
-                        accessibilityNodeInfoList.get(0).getParent().getChildCount() == 0) {
-                    return;
-                }  
-                AccessibilityNodeInfo tempInfo = accessibilityNodeInfoList.get(0).getParent().getChild(3);
+                List<AccessibilityNodeInfo> infos = accessibilityNodeInfo.findAccessibilityNodeInfosByViewId("com.tencent.mm:id/fbe");
                 for (int j = startPicIndex; j < startPicIndex + picCount; j++) {
-                    AccessibilityNodeInfo childNodeInfo = tempInfo.getChild(j);
-                    //华为手机有搜素建位改成自动获取index的chilid
-                    if(childNodeInfo==null){
-                        tempInfo=accessibilityNodeInfoList.get(0).getParent().getChild(4);
-                        childNodeInfo=tempInfo.getChild(j);
-                    }
-                    if (childNodeInfo != null) {
-                        //遍历子节点
-                        for (int k = 0; k < childNodeInfo.getChildCount(); k++) {
-                            if (childNodeInfo.getChild(k).isEnabled() && childNodeInfo.getChild(k).isClickable()) {
-                                childNodeInfo.getChild(k).performAction(AccessibilityNodeInfo.ACTION_CLICK);//选中图片
-                            }
-                        }
-                    }
+                    AccessibilityNodeInfo item = infos.get(j);
+                    item.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                 }
-
                 List<AccessibilityNodeInfo> finishList = accessibilityNodeInfo.findAccessibilityNodeInfosByText("完成(" + picCount + "/9)");//点击确定
                 performClickBtn(finishList);
             }
@@ -311,6 +328,6 @@ public class AccessibilitySampleService extends AccessibilityService {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        LogUtil.e("服务被杀死!");
+        Toast.makeText(getBaseContext(),"服务被杀死了啦啦啦", Toast.LENGTH_LONG).show();
     }
 }
